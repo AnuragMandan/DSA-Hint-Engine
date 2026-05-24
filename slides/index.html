@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>breadcrumbs.ai — AI for Builders Workshop</title>
+  <meta name="description" content="Build a local DSA Hint Engine with FastAPI + Ollama. AI for Builders Workshop.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ─── Tokens ─────────────────────────────────── */
+    :root {
+      --accent:   hsl(256, 78%, 68%);
+      --accent2:  hsl(200, 90%, 62%);
+      --amber:    hsl(38, 95%, 60%);
+      --green:    hsl(158, 68%, 50%);
+      --red:      hsl(0, 78%, 64%);
+      --text:     hsl(220, 30%, 96%);
+      --muted:    hsl(220, 16%, 58%);
+      --bg:       hsl(228, 30%, 6%);
+      --code-bg:  rgba(0, 0, 0, 0.55);
+      --ease:     cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+
+    /* ─── Reset ──────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* ─── Particle canvas (behind everything) ────── */
+    #canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      display: block;
+    }
+
+    /* ─── Slide wrapper ──────────────────────────── */
+    #deck {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      overflow: hidden;
+    }
+
+    /* ─── Individual slide ───────────────────────── */
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 5vw 8vw;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(30px);
+      transition: opacity 0.5s var(--ease), transform 0.5s var(--ease);
+      will-change: opacity, transform;
+    }
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    /* ─── Progress bar ───────────────────────────── */
+    #progress-rail {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: rgba(255,255,255,0.06);
+      z-index: 100;
+    }
+    #progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width 0.4s var(--ease);
+      width: 0%;
+    }
+
+    /* ─── Nav bar ────────────────────────────────── */
+    #nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 52px;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 3vw;
+      background: rgba(8, 8, 18, 0.7);
+      border-top: 1px solid rgba(255,255,255,0.05);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    #nav-left {
+      font-size: 0.78rem;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+    #nav-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .nbtn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--text);
+      padding: 6px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .nbtn:hover:not(:disabled) {
+      background: var(--accent);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .nbtn:disabled { opacity: 0.25; cursor: not-allowed; }
+    #counter {
+      font-size: 0.82rem;
+      color: var(--muted);
+      min-width: 54px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .key-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .kbd {
+      display: inline-block;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+    }
+
+    /* ═══════════════════════════════════════════════
+       SLIDE CONTENT ATOMS
+    ═══════════════════════════════════════════════ */
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(112, 90, 252, 0.10);
+      border: 1px solid rgba(112, 90, 252, 0.25);
+      color: var(--accent);
+      padding: 5px 14px;
+      border-radius: 100px;
+      font-size: 0.73rem;
+      font-weight: 700;
+      letter-spacing: 1.3px;
+      text-transform: uppercase;
+      margin-bottom: 1.6rem;
+    }
+    .badge-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: blink 1.8s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:0.3; transform:scale(0.6); }
+    }
+
+    /* Headline */
+    h1.hl {
+      font-size: clamp(2rem, 5vw, 3.6rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.5px;
+      margin-bottom: 1.5rem;
+      background: linear-gradient(145deg, #fff 20%, var(--muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-align: center;
+    }
+    h1.hl .c-accent  { -webkit-text-fill-color: var(--accent); }
+    h1.hl .c-green   { -webkit-text-fill-color: var(--green);  }
+    h1.hl .c-amber   { -webkit-text-fill-color: var(--amber);  }
+    h1.hl .c-muted   { -webkit-text-fill-color: var(--muted);  }
+
+    /* Sub */
+    .sub {
+      font-size: clamp(0.95rem, 1.6vw, 1.15rem);
+      color: var(--muted);
+      line-height: 1.65;
+      text-align: center;
+      max-width: 700px;
+      margin-bottom: 1.6rem;
+    }
+    .sub strong { color: var(--text); font-weight: 600; }
+
+    /* Two-column grid */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3vw;
+      width: 100%;
+      max-width: 1100px;
+      align-items: start;
+      margin-top: 0.5rem;
+    }
+    .grid.left-wide  { grid-template-columns: 1.15fr 0.85fr; }
+    .grid.right-wide { grid-template-columns: 0.85fr 1.15fr; }
+
+    /* Bullet list */
+    .bullets {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1.05rem;
+      text-align: left;
+    }
+    .bullets li {
+      position: relative;
+      padding-left: 1.8rem;
+      font-size: clamp(0.9rem, 1.4vw, 1.05rem);
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .bullets li::before {
+      content: "→";
+      position: absolute; left: 0;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .bullets li strong { color: var(--text); font-weight: 600; }
+    .tag {
+      display: inline-block;
+      background: rgba(112,90,252,0.12);
+      color: var(--accent);
+      border-radius: 5px;
+      padding: 1px 7px;
+      font-size: 0.8rem;
+      font-family: 'Fira Code', monospace;
+    }
+    .c-green  { color: var(--green) !important; }
+    .c-amber  { color: var(--amber) !important; }
+    .c-red    { color: var(--red)   !important; }
+    .c-accent { color: var(--accent)!important; }
+
+    /* Code box */
+    .code-box {
+      background: var(--code-bg);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px;
+      padding: 1.4rem 1.6rem;
+      overflow-x: auto;
+    }
+    .file-label {
+      display: block;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.68rem;
+      color: var(--muted);
+      letter-spacing: 0.4px;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    pre {
+      font-family: 'Fira Code', monospace;
+      font-size: clamp(0.72rem, 1.1vw, 0.84rem);
+      line-height: 1.65;
+      color: #c9d1d9;
+      white-space: pre;
+    }
+    /* syntax tokens */
+    .kw  { color: #a78bfa; font-weight: 600; }
+    .str { color: #34d399; }
+    .cm  { color: #6b7280; font-style: italic; }
+    .nb  { color: #f59e0b; }
+    .fn  { color: #60a5fa; }
+    .tp  { color: #fb923c; }
+
+    /* ── Tier cards ── */
+    .tier-row {
+      display: flex;
+      gap: 1.5vw;
+      width: 100%;
+      max-width: 1000px;
+      margin-top: 0.8rem;
+    }
+    .tier-card {
+      flex: 1;
+      border-radius: 14px;
+      padding: 1.3rem 1.4rem;
+      text-align: left;
+      border: 1px solid;
+    }
+    .tier-card.t1 { background: rgba(52,211,153,0.07); border-color: rgba(52,211,153,0.22); }
+    .tier-card.t2 { background: rgba(96,165,250,0.07); border-color: rgba(96,165,250,0.22); }
+    .tier-card.t3 { background: rgba(245,158,11,0.07); border-color: rgba(245,158,11,0.22); }
+    .t-label {
+      font-size: 0.68rem; font-weight: 700;
+      letter-spacing: 1.3px; text-transform: uppercase;
+      margin-bottom: 0.45rem;
+    }
+    .tier-card.t1 .t-label { color: var(--green); }
+    .tier-card.t2 .t-label { color: var(--accent2); }
+    .tier-card.t3 .t-label { color: var(--amber); }
+    .t-route {
+      font-family: 'Fira Code', monospace;
+      font-size: 0.92rem; color: var(--text);
+      margin-bottom: 0.45rem;
+    }
+    .t-desc { font-size: 0.83rem; color: var(--muted); line-height: 1.45; }
+
+    /* ── Arch box ── */
+    .arch-box {
+      font-family: 'Fira Code', monospace;
+      font-size: clamp(0.68rem, 1vw, 0.78rem);
+      line-height: 1.75;
+      color: var(--muted);
+      background: var(--code-bg);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 1.6rem 2rem;
+      width: 100%;
+      max-width: 860px;
+      text-align: left;
+    }
+    .arch-box .ha { color: var(--accent);  font-weight: 500; }
+    .arch-box .hg { color: var(--green);   }
+    .arch-box .hy { color: var(--amber);   }
+
+    /* ── Pill row (title slide) ── */
+    .pill-row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 0.4rem; }
+    .pill {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 100px; padding: 6px 18px;
+      font-size: 0.88rem; font-weight: 600; color: var(--text);
+    }
+    .pill.pa { background: rgba(112,90,252,0.12); border-color: rgba(112,90,252,0.28); color: var(--accent); }
+    .pill.pg { background: rgba(52,211,153,0.10); border-color: rgba(52,211,153,0.25); color: var(--green);  }
+    .pill.py { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.25); color: var(--amber);  }
+
+    /* ── Wrap cards ── */
+    .wrap-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.2rem;
+      width: 100%; max-width: 900px;
+      margin-top: 0.8rem;
+    }
+    .wrap-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px;
+      padding: 1.2rem 1.4rem;
+      text-align: left;
+    }
+    .wc-num   { font-size: 0.68rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); margin-bottom: 0.3rem; }
+    .wc-title { font-size: 0.98rem; font-weight: 600; color: var(--text);   margin-bottom: 0.25rem; }
+    .wc-desc  { font-size: 0.82rem; color: var(--muted); line-height: 1.45; }
+
+    /* ── LIVE CODING slide ── */
+    .live-coding {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2rem;
+    }
+    .live-coding-label {
+      font-size: clamp(3rem, 7vw, 5.5rem);
+      font-weight: 800;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .live-coding-sub {
+      font-size: clamp(0.95rem, 1.6vw, 1.2rem);
+      color: var(--muted);
+      font-family: 'Fira Code', monospace;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px;
+      padding: 0.6rem 1.8rem;
+    }
+
+    /* ── Break slide ── */
+    .break-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.6rem;
+      text-align: center;
+    }
+    .break-label {
+      font-size: clamp(2rem, 4.5vw, 3.8rem);
+      font-weight: 800;
+      color: var(--text);
+    }
+    .break-time {
+      font-family: 'Fira Code', monospace;
+      font-size: 1rem; color: var(--muted);
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 0.7rem 2.2rem;
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 3D Particle Canvas -->
+<canvas id="canvas"></canvas>
+
+<!-- Progress rail -->
+<div id="progress-rail"><div id="progress-fill"></div></div>
+
+<!-- Slide deck -->
+<div id="deck">
+
+  <!-- ══ 01 · Title ══════════════════════════════════════ -->
+  <div class="slide active">
+    <span class="badge"><span class="badge-dot"></span>15:00 &nbsp;·&nbsp; Welcome</span>
+    <h1 class="hl">Build a <span class="c-accent">DSA Hint Engine</span><br>that actually teaches</h1>
+    <p class="sub">
+      FastAPI &nbsp;·&nbsp; Ollama llama3.2:3b &nbsp;·&nbsp; Progressive Prompts &nbsp;·&nbsp; Stateful Sessions<br>
+      <strong>No cloud. No API bill. No spoilers.</strong>
+    </p>
+    <div class="pill-row">
+      <span class="pill pa">breadcrumbs.ai</span>
+      <span class="pill pg">Ramya &amp; Hemang</span>
+      <span class="pill">@raycreatess</span>
+      <span class="pill py">AI for Builders &nbsp;·&nbsp; 2026</span>
+    </div>
+  </div>
+
+  <!-- ══ 02 · Cold Demo ══════════════════════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>15:00 &nbsp;·&nbsp; Cold Demo</span>
+    <h1 class="hl">Watch it work <span class="c-accent">before</span> we build it</h1>
+    <div class="grid left-wide">
+      <ul class="bullets">
+        <li>POST broken Two Sum code, receive a <strong>nudge</strong> — not a solution</li>
+        <li>Three escalating tiers: <span class="tag">/hint/1</span> &nbsp;<span class="tag">/hint/2</span> &nbsp;<span class="tag">/hint/3</span></li>
+        <li>All inference runs <strong>100% locally</strong> — Ollama on your machine</li>
+        <li><strong>Goal:</strong> you will rebuild this from scratch in 3 hours</li>
+      </ul>
+      <div class="code-box">
+        <span class="file-label">curl -X POST .../hint/1</span>
+<pre><span class="cm"># Request</span>
+{
+  <span class="str">"code"</span>: <span class="str">"for i in nums:\n  ..."</span>,
+  <span class="str">"problem_description"</span>: <span class="str">"Two Sum"</span>,
+  <span class="str">"difficulty"</span>: <span class="str">"Easy"</span>
+}
+
+<span class="cm"># Response — Tier 1 nudge</span>
+{
+  <span class="str">"hint"</span>: <span class="str">"Can we track seen values to
+avoid checking every pair?"</span>
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 03 · Setup ══════════════════════════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>15:10 &nbsp;·&nbsp; Setup</span>
+    <h1 class="hl">Clone &rarr; <span class="c-green">Ollama check</span> &rarr; Pull model &rarr; Env vars</h1>
+    <div class="grid">
+      <ul class="bullets">
+        <li><strong>Clone</strong> the boilerplate, <code style="color:var(--green)">cd starter/</code></li>
+        <li><strong>Verify Ollama</strong> is running: <code style="color:var(--green)">curl http://localhost:11434</code> → "Ollama is running"</li>
+        <li><strong>Pull the model</strong>: <code style="color:var(--amber)">ollama pull llama3.2:3b</code> — approx 2 GB, start early</li>
+        <li>Python 3.10+ venv → <code style="color:var(--muted)">pip install -r requirements.txt</code></li>
+        <li><code style="color:var(--muted)">cp .env.example .env</code> — set <code style="color:var(--accent)">OLLAMA_HOST</code> and <code style="color:var(--accent)">MODEL_NAME</code></li>
+      </ul>
+      <div class="code-box">
+        <span class="file-label">terminal</span>
+<pre><span class="kw">$</span> git clone &lt;repo&gt; &amp;&amp; <span class="kw">cd</span> starter
+
+<span class="cm"># 1. Verify Ollama</span>
+<span class="kw">$</span> curl http://localhost:11434
+<span class="str">Ollama is running</span>
+
+<span class="cm"># 2. Pull the model</span>
+<span class="kw">$</span> ollama pull llama3.2:3b
+
+<span class="cm"># 3. Python env</span>
+<span class="kw">$</span> python3 -m venv venv &amp;&amp; source venv/bin/activate
+<span class="kw">$</span> pip install -r requirements.txt
+
+<span class="cm"># 4. Env vars</span>
+<span class="kw">$</span> cp .env.example .env</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 04 · Architecture Walkthrough ═════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>15:30 &nbsp;·&nbsp; Architecture Walkthrough</span>
+    <h1 class="hl">The full <span class="c-accent">request journey</span></h1>
+    <div class="arch-box">
+<pre>  <span class="ha">Student Frontend</span>
+        |
+        |  POST /hint/&lt;tier&gt;   { code, problem_description, difficulty }
+        v
+  <span class="ha">FastAPI Server  (async, Uvicorn)</span>
+  |-- Pydantic validation  --&gt;  HintRequest schema
+  |-- Tier router          --&gt;  selects prompt template  (T1 / T2 / T3)
+  |-- System guardrails    --&gt;  "Never reveal working code"
+  `-- Lifespan HTTPX pool  --&gt;  persistent connection to Ollama
+        |
+        |  HTTP JSON   format="json"
+        v
+  <span class="hg">Ollama Daemon  :11434</span>
+  `-- Model: <span class="hy">llama3.2:3b</span>   (fully offline, zero token cost)
+        |
+        v
+  <span class="ha">HintResponse</span>  { thought_process, hint, conceptual_explanation }</pre>
+    </div>
+  </div>
+
+  <!-- ══ 05 · Tier Overview ═════════════════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>15:30 &nbsp;·&nbsp; Architecture &nbsp;·&nbsp; Hint Tiers</span>
+    <h1 class="hl">Three tiers, one <span class="c-accent">progressive</span> ladder</h1>
+    <div class="tier-row">
+      <div class="tier-card t1">
+        <div class="t-label">Tier 1 &nbsp;·&nbsp; Slight Hint</div>
+        <div class="t-route">POST /hint/1</div>
+        <div class="t-desc">Socratic nudge only. Ask a guiding question. Never name the data structure or algorithm.</div>
+      </div>
+      <div class="tier-card t2">
+        <div class="t-label">Tier 2 &nbsp;·&nbsp; Approach Hint</div>
+        <div class="t-route">POST /hint/2</div>
+        <div class="t-desc">Name the algorithm or pattern. Explain why the current approach hurts complexity. Still no code.</div>
+      </div>
+      <div class="tier-card t3">
+        <div class="t-label">Tier 3 &nbsp;·&nbsp; Pseudocode Hint</div>
+        <div class="t-route">POST /hint/3</div>
+        <div class="t-desc">Numbered plain-English steps. Fills the gap without writing any runnable code.</div>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:1.6rem; font-size:0.9rem;">
+      Each tier is a <strong>separate prompt template</strong> chosen by the URL path — not a runtime parameter.
+    </p>
+  </div>
+
+  <!-- ══ 06 · LIVE CODING — /hint/1 ════════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>15:45 &nbsp;·&nbsp; Endpoint 1</span>
+    <div class="live-coding">
+      <div class="live-coding-label">Live Coding</div>
+      <div class="live-coding-sub">POST /hint/1 &nbsp;—&nbsp; the slight hint</div>
+      <ul class="bullets" style="max-width:560px;text-align:left;">
+        <li>Define <code style="color:var(--accent)">TIER1_SYSTEM</code> in <code>prompts.py</code> — Socratic question only, never name data structure</li>
+        <li>Add route <code style="color:var(--green)">@app.post("/hint/1")</code> in <code>main.py</code></li>
+        <li>Call Ollama with <code style="color:var(--amber)">format="json"</code> and parse with <code>json.loads()</code></li>
+        <li>Return <code style="color:var(--muted)">HintResponse(thought_process=..., hint=...)</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ══ 07 · /hint/1 — Prompt Design ═════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>15:45 &nbsp;·&nbsp; Endpoint 1 &nbsp;·&nbsp; Prompt Design</span>
+    <h1 class="hl"><span class="c-green">/hint/1</span> — writing the system prompt</h1>
+    <div class="grid left-wide">
+      <ul class="bullets">
+        <li>System prompt <strong>must forbid</strong> naming any data structure</li>
+        <li>Instruct the model to ask exactly <strong>one</strong> guiding question</li>
+        <li>Enforce <span class="tag">format="json"</span> on the Ollama call — guarantees parseable output</li>
+        <li><span class="c-amber">Common trap:</span> model wraps JSON in markdown fences — strip before <code>json.loads()</code></li>
+        <li><span class="c-green">Test:</span> Two Sum T1 should ask about search cost, not mention "hash map"</li>
+      </ul>
+      <div class="code-box">
+        <span class="file-label">app/prompts.py</span>
+<pre>TIER1_SYSTEM = <span class="str">"""
+You are a Socratic DSA tutor.
+Rules:
+- Ask ONE guiding question only.
+- Never name the data structure.
+- Never show code.
+Return JSON:
+{
+  "thought_process": "...",
+  "hint": "..."
+}
+"""</span>
+
+<span class="cm"># app/main.py</span>
+<span class="kw">@app</span>.post(<span class="str">"/hint/1"</span>)
+<span class="kw">async def</span> <span class="fn">hint_1</span>(req: HintRequest):
+    msgs = build_messages(TIER1_SYSTEM, req)
+    raw  = <span class="kw">await</span> client.chat(msgs, format=<span class="str">"json"</span>)
+    data = json.loads(raw.strip(<span class="str">"`"</span>))
+    <span class="kw">return</span> HintResponse(**data)</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 08 · LIVE CODING — /hint/2 ════════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>16:15 &nbsp;·&nbsp; Endpoint 2</span>
+    <div class="live-coding">
+      <div class="live-coding-label">Live Coding</div>
+      <div class="live-coding-sub">POST /hint/2 &nbsp;—&nbsp; the approach hint</div>
+      <ul class="bullets" style="max-width:560px;text-align:left;">
+        <li>Add <code style="color:var(--accent)">TIER2_SYSTEM</code> — model <strong>may now name</strong> the algorithm or pattern</li>
+        <li>Explain complexity cost in plain English (why O(n²) hurts)</li>
+        <li>Extend <code style="color:var(--tp)">HintResponse</code> schema with <code style="color:var(--amber)">conceptual_explanation: str | None</code></li>
+        <li>Add route <code style="color:var(--green)">@app.post("/hint/2")</code> — identical pipeline, different prompt</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ══ 09 · /hint/2 — Schema ═════════════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>16:15 &nbsp;·&nbsp; Endpoint 2 &nbsp;·&nbsp; Schema</span>
+    <h1 class="hl"><span class="c-accent2">/hint/2</span> — approach hint</h1>
+    <div class="grid">
+      <ul class="bullets">
+        <li><strong>Now</strong> the model may name the algorithm (hash map, sliding window, etc.)</li>
+        <li>Explain <em>why</em> the student's approach is slow — complexity in plain English</li>
+        <li>Response gains a new field: <span class="tag">conceptual_explanation</span></li>
+        <li>Pydantic: add <code style="color:var(--amber)">conceptual_explanation: str | None = None</code></li>
+        <li><span class="c-amber">Common mistake:</span> forgetting to strip markdown fences before <code>json.loads()</code></li>
+      </ul>
+      <div class="code-box">
+        <span class="file-label">app/schemas.py</span>
+<pre><span class="kw">class</span> <span class="tp">HintResponse</span>(BaseModel):
+    thought_process: <span class="tp">str</span>
+    hint: <span class="tp">str</span>
+    conceptual_explanation: <span class="tp">str</span> | <span class="kw">None</span> = <span class="kw">None</span>
+
+<span class="cm"># app/prompts.py</span>
+TIER2_SYSTEM = <span class="str">"""
+You are a DSA tutor.
+- You MAY name the algorithm or pattern.
+- Explain the time-complexity issue.
+- Still no working code.
+Return JSON:
+{
+  "thought_process": "...",
+  "hint": "...",
+  "conceptual_explanation": "..."
+}
+"""</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 10 · LIVE CODING — /hint/3 ════════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>16:40 &nbsp;·&nbsp; Endpoint 3</span>
+    <div class="live-coding">
+      <div class="live-coding-label">Live Coding</div>
+      <div class="live-coding-sub">POST /hint/3 &nbsp;—&nbsp; the pseudocode hint</div>
+      <ul class="bullets" style="max-width:560px;text-align:left;">
+        <li>Add <code style="color:var(--accent)">TIER3_SYSTEM</code> — numbered plain-English steps, no syntax</li>
+        <li>Guardrail: <em>"Do not write runnable code in any language"</em></li>
+        <li>Extend schema: <code style="color:var(--amber)">pseudocode_steps: list[str] | None</code></li>
+        <li><span class="c-green">Live test:</span> Two Sum T3 should output: init dict → loop → check complement → store index</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ══ 11 · Break ══════════════════════════════════════ -->
+  <div class="slide">
+    <span class="badge">17:05 &nbsp;·&nbsp; Break</span>
+    <div class="break-content">
+      <h1 class="hl" style="font-size: clamp(2.5rem,5vw,4rem);">10-minute break</h1>
+      <p class="sub" style="margin-bottom:0;">You have three working LLM endpoints. Well done.</p>
+      <div class="break-time">Back at 17:15 &nbsp;—&nbsp; Session State next</div>
+      <ul class="bullets" style="max-width:500px; text-align:left;">
+        <li>Check your terminal for JSON parse errors</li>
+        <li>Confirm all three tiers return <strong>different</strong> levels of detail for the same input</li>
+        <li>Next: teaching the API to <strong>remember</strong> which problem a student is on</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ══ 12 · Session State — Concept ══════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>17:15 &nbsp;·&nbsp; Session State</span>
+    <h1 class="hl">Giving the API a <span class="c-accent">memory</span></h1>
+    <div class="grid left-wide">
+      <ul class="bullets">
+        <li>HTTP is stateless — every request starts blind</li>
+        <li>Without memory the model cannot see which problem the student is on or what hints they already received</li>
+        <li>Solution: <strong>in-memory session dict</strong> keyed by <span class="tag">session_id</span></li>
+        <li>Store the full message array; pass it all to Ollama each turn</li>
+        <li><span class="c-green">Route:</span> <code style="color:var(--green)">POST /session?session_id=sess_abc</code></li>
+      </ul>
+      <div class="code-box">
+        <span class="file-label">app/main.py — session store</span>
+<pre><span class="cm"># The "database" — lives in RAM</span>
+sessions_db: <span class="tp">dict</span>[<span class="tp">str</span>, <span class="tp">list</span>[<span class="tp">dict</span>]] = {}
+
+<span class="cm"># Message array format</span>
+{
+  <span class="str">"sess_abc"</span>: [
+    {<span class="str">"role"</span>: <span class="str">"system"</span>,    <span class="str">"content"</span>: SESSION_PROMPT},
+    {<span class="str">"role"</span>: <span class="str">"user"</span>,      <span class="str">"content"</span>: <span class="str">"my code here"</span>},
+    {<span class="str">"role"</span>: <span class="str">"assistant"</span>, <span class="str">"content"</span>: <span class="str">"hint #1"</span>},
+    {<span class="str">"role"</span>: <span class="str">"user"</span>,      <span class="str">"content"</span>: <span class="str">"follow-up q"</span>}
+  ]
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 13 · LIVE CODING — /session ═══════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>17:15 &nbsp;·&nbsp; Session State</span>
+    <div class="live-coding">
+      <div class="live-coding-label">Live Coding</div>
+      <div class="live-coding-sub">POST /session &nbsp;—&nbsp; stateful multi-turn chat</div>
+      <ul class="bullets" style="max-width:600px;text-align:left;">
+        <li>If <code style="color:var(--accent)">session_id</code> is new — initialise with system prompt</li>
+        <li>Append incoming user message to the session array</li>
+        <li>Call Ollama with the <strong>entire history</strong> as the messages array</li>
+        <li>Append assistant reply, return full history</li>
+        <li><span class="c-amber">Production note:</span> add max-turn limits to avoid context overflow</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ══ 14 · Live Audit ════════════════════════════════ -->
+  <div class="slide">
+    <span class="badge"><span class="badge-dot"></span>18:20 &nbsp;·&nbsp; Live Audit</span>
+    <h1 class="hl">Test the full <span class="c-accent">end-to-end</span> flow</h1>
+    <div class="grid">
+      <div class="code-box">
+        <span class="file-label">terminal — audit all endpoints</span>
+<pre><span class="cm"># Tier 1 — conceptual nudge</span>
+<span class="kw">$</span> curl -s -X POST <span class="str">"localhost:8000/hint/1"</span> \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -d <span class="str">'{"code":"for i in nums:...",
+       "problem_description":"Two Sum",
+       "difficulty":"Easy"}'</span> | python3 -m json.tool
+
+<span class="cm"># Tier 3 — pseudocode</span>
+<span class="kw">$</span> curl -s -X POST <span class="str">"localhost:8000/hint/3"</span> \
+  -d @payload.json | python3 -m json.tool
+
+<span class="cm"># Session — multi-turn</span>
+<span class="kw">$</span> curl -s -X POST \
+  <span class="str">"localhost:8000/session?session_id=demo_1"</span> \
+  -d <span class="str">'{"role":"user","content":"why hash map?"}'</span></pre>
+      </div>
+      <ul class="bullets">
+        <li><span class="c-green">Each tier returns a different level of detail</span></li>
+        <li><span class="c-green"><code>thought_process</code> present in every response</span></li>
+        <li><span class="c-green">Session history grows with each follow-up</span></li>
+        <li><span class="c-red">Watch for: markdown fences in JSON output</span></li>
+        <li><span class="c-red">Watch for: Ollama timeout beyond 30 s — model may be cold</span></li>
+        <li><span class="c-amber">Open <code>/docs</code> to try all endpoints via Swagger UI</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ══ 15 · Q&A + Wrap ════════════════════════════════ -->
+  <div class="slide">
+    <span class="badge">18:30 &nbsp;·&nbsp; Q&amp;A + Wrap</span>
+    <h1 class="hl">You built a <span class="c-green">real</span> LLM backend</h1>
+    <div class="wrap-grid">
+      <div class="wrap-card">
+        <div class="wc-num">01 &nbsp;·&nbsp; Local Inference</div>
+        <div class="wc-title">Ollama + llama3.2:3b</div>
+        <div class="wc-desc">No cloud, no billing, full data privacy. HTTP JSON straight to port 11434.</div>
+      </div>
+      <div class="wrap-card">
+        <div class="wc-num">02 &nbsp;·&nbsp; Progressive Prompts</div>
+        <div class="wc-title">Tier 1 → 2 → 3</div>
+        <div class="wc-desc">Each endpoint holds a separate system prompt template. Guardrails prevent spoilers at every level.</div>
+      </div>
+      <div class="wrap-card">
+        <div class="wc-num">03 &nbsp;·&nbsp; Structured Output</div>
+        <div class="wc-title">JSON Mode + Pydantic</div>
+        <div class="wc-desc">format="json" forces valid JSON. Pydantic schemas validate and self-document the API.</div>
+      </div>
+      <div class="wrap-card">
+        <div class="wc-num">04 &nbsp;·&nbsp; Stateful Sessions</div>
+        <div class="wc-title">In-Memory History</div>
+        <div class="wc-desc">UUID-keyed dict of message arrays turns a stateless HTTP API into a multi-turn tutoring chat.</div>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:1.4rem; font-size:0.85rem;">
+      Next steps: swap the dict for Redis &nbsp;·&nbsp; add a React frontend &nbsp;·&nbsp; containerise with Docker<br>
+      <strong>Ramya &amp; Hemang &nbsp;·&nbsp; @raycreatess &nbsp;·&nbsp; breadcrumbs.ai</strong>
+    </p>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- Nav bar -->
+<div id="nav">
+  <div id="nav-left">breadcrumbs.ai &nbsp;·&nbsp; AI for Builders &nbsp;·&nbsp; Ramya &amp; Hemang</div>
+  <div id="nav-controls">
+    <span class="key-hint"><span class="kbd">←</span> <span class="kbd">→</span></span>
+    <button class="nbtn" id="prevBtn">Prev</button>
+    <span id="counter">1 / 15</span>
+    <button class="nbtn" id="nextBtn">Next</button>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   3D PARTICLE SYSTEM
+═══════════════════════════════════════════════════════ */
+(function () {
+  const canvas = document.getElementById('canvas');
+  const ctx    = canvas.getContext('2d');
+
+  let W, H, cx, cy;
+  const mouse = { x: 0, y: 0 };
+  const PARTICLE_COUNT = 120;
+  const MAX_DEPTH = 800;
+  const SPEED = 0.4;
+  const FOV = 400;
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    cx = W / 2; cy = H / 2;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  window.addEventListener('mousemove', e => {
+    mouse.x = e.clientX - cx;
+    mouse.y = e.clientY - cy;
+  });
+
+  /* Particle definition */
+  class Particle {
+    constructor() { this.reset(true); }
+
+    reset(initial) {
+      this.x = (Math.random() - 0.5) * W * 2.5;
+      this.y = (Math.random() - 0.5) * H * 2.5;
+      this.z = initial ? Math.random() * MAX_DEPTH : MAX_DEPTH;
+      this.vx = (Math.random() - 0.5) * 0.25;
+      this.vy = (Math.random() - 0.5) * 0.25;
+      this.radius = 1 + Math.random() * 1.5;
+      /* pick a colour from the palette */
+      const palette = [
+        [112, 90, 252],   /* accent purple */
+        [96,  165, 250],  /* accent2 blue  */
+        [52,  211, 153],  /* green         */
+        [245, 158, 11],   /* amber         */
+        [200, 200, 255],  /* soft white    */
+      ];
+      this.rgb = palette[Math.floor(Math.random() * palette.length)];
+    }
+
+    update() {
+      /* cursor parallax — particles drift gently toward cursor */
+      const mx = mouse.x * 0.0006;
+      const my = mouse.y * 0.0006;
+      this.x += this.vx - mx;
+      this.y += this.vy - my;
+      this.z -= SPEED;
+
+      if (this.z <= 0) this.reset(false);
+    }
+
+    draw() {
+      const scale  = FOV / (FOV + this.z);
+      const sx     = this.x * scale + cx;
+      const sy     = this.y * scale + cy;
+      const sr     = this.radius * scale;
+      const alpha  = scale * 0.85;
+
+      if (sx < -50 || sx > W + 50 || sy < -50 || sy > H + 50) {
+        this.reset(false);
+        return;
+      }
+
+      ctx.beginPath();
+      ctx.arc(sx, sy, Math.max(sr, 0.4), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${this.rgb[0]},${this.rgb[1]},${this.rgb[2]},${alpha.toFixed(3)})`;
+      ctx.fill();
+    }
+  }
+
+  /* Connection lines between close particles */
+  function drawLines(particles) {
+    const MAX_DIST = 120;
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const a = particles[i], b = particles[j];
+        const sa = FOV / (FOV + a.z);
+        const sb = FOV / (FOV + b.z);
+        const ax = a.x * sa + cx, ay = a.y * sa + cy;
+        const bx = b.x * sb + cx, by = b.y * sb + cy;
+        const d  = Math.hypot(ax - bx, ay - by);
+        if (d < MAX_DIST) {
+          const alpha = (1 - d / MAX_DIST) * 0.12;
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+          ctx.strokeStyle = `rgba(112,90,252,${alpha.toFixed(3)})`;
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  const particles = Array.from({ length: PARTICLE_COUNT }, () => new Particle());
+
+  function loop() {
+    ctx.clearRect(0, 0, W, H);
+    drawLines(particles);
+    for (const p of particles) { p.update(); p.draw(); }
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+/* ═══════════════════════════════════════════════════════
+   SLIDE NAVIGATION
+═══════════════════════════════════════════════════════ */
+(function () {
+  const slides   = document.querySelectorAll('.slide');
+  const prevBtn  = document.getElementById('prevBtn');
+  const nextBtn  = document.getElementById('nextBtn');
+  const counter  = document.getElementById('counter');
+  const fill     = document.getElementById('progress-fill');
+  let cur = 0;
+
+  function go(n) {
+    if (n < 0 || n >= slides.length) return;
+    slides[cur].classList.remove('active');
+    cur = n;
+    slides[cur].classList.add('active');
+    counter.textContent  = `${cur + 1} / ${slides.length}`;
+    fill.style.width     = `${((cur + 1) / slides.length) * 100}%`;
+    prevBtn.disabled     = cur === 0;
+    nextBtn.disabled     = cur === slides.length - 1;
+  }
+
+  prevBtn.addEventListener('click', () => go(cur - 1));
+  nextBtn.addEventListener('click', () => go(cur + 1));
+
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight','PageDown','Space'].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+    if (['ArrowLeft', 'PageUp'          ].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+  });
+
+  go(0);
+})();
+</script>
+</body>
+</html>
