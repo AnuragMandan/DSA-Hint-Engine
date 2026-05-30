@@ -1,9 +1,3 @@
-# Pre-Workshop Setup Checklist - AI for Builders
-
-Run these commands before the workshop to verify your local machine is ready for live development.
-
----
-
 ## 1. Fast Setup in 5 Commands
 
 Follow these steps in your terminal to download the 3B parameter model and configure your Python environment.
