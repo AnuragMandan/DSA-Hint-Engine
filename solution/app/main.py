@@ -3,6 +3,7 @@ import json
 import re
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from app.models import HintRequest, HintResponse, Session, SessionMessage
@@ -34,6 +35,15 @@ app = FastAPI(
     title="DSA Hint Engine API - Solution",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+# Allow requests from any origin (local file:// frontend or localhost dev servers)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # In-memory session store
