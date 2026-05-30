@@ -1,9 +1,4 @@
-# breadcrumbs.ai — DSA Hint Engine Workshop Kit
-
-> **AI for Builders** · A complete, high-production live workshop kit. Build a local, asynchronous FastAPI server powered by a 3B parameter Ollama LLM to deliver progressive, non-spoiling feedback for Data Structures & Algorithms (DSA).
->
-> Developed by **Ramya & Hemang** ([@raycreatess](https://github.com/raycreatess)) · 2026
-
+# breadcrumbs.ai — DSA Hint Engine
 ---
 
 ## Architectural Blueprint
@@ -73,7 +68,7 @@ breadcrumbs.ai/
 
 ---
 
-## Core Concepts Taught
+## Core Concepts
 
 1. **Local LLM Inference**: Invoking locally running open-weight models (`llama3.2:3b`) directly via HTTP protocols using standard `httpx` async calls. This cuts API dependencies, removes billing boundaries, and keeps code data 100% private.
 2. **Progressive Prompt Chaining**: Avoiding massive "all-in-one" prompt failures by routing inputs across specific hierarchical templates via separate endpoints (`/hint/1` conceptual, `/hint/2` algorithmic, `/hint/3` pseudocode).
@@ -292,6 +287,6 @@ We have hand-tested and verified three core algorithmic cases to demonstrate how
 
 ## License & Attribution
 
-This workshop kit was crafted for the **AI for Builders** community. Feel free to clone, customize, and run your own local instruction events.
+This workshop kit was crafted for the **Raycreatess** community. Feel free to clone, customize, and run your own local instruction events.
 
 *Contributors: **Ramya & Hemang** ([@raycreatess](https://github.com/raycreatess))*
