@@ -1,9 +1,3 @@
-# Student Reference Notes - AI for Builders
-
-A condensed reference sheet to lock in your knowledge. 5 concepts, 5 code snippets, and 3 ideas to build next.
-
----
-
 ## 1. LLM Calls (Local Inference)
 Local inference runs directly on your hardware without external API dependencies. We use `httpx` to send simple HTTP POST requests to Ollama's local service at port 11434. This approach eliminates latency fluctuations and costly token pricing models.
 
