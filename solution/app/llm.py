@@ -1,4 +1,4 @@
-import os
+import os 
 import httpx
 from typing import Any
 
@@ -6,7 +6,7 @@ class OllamaClient:
     def __init__(self) -> None:
         self.host = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
         self.model = os.getenv("MODEL_NAME", "llama3.2:3b")
-        self.client = httpx.AsyncClient(base_url=self.host, timeout=60.0)
+        self.client = httpx.AsyncClient(base_url=self.host, timeout=60.0) #wrapper
 
     async def chat(self, messages: list[dict[str, str]], temperature: float = 0.2, format: str | None = None) -> str:
         """
