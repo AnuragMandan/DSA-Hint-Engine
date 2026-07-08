@@ -18,4 +18,3 @@ source venv/bin/activate
 # 5. Install the pinned dependencies
 pip install -r requirements.txt
 ```
-Built by Ramya & Hemang (@raycreatess) · AI for Builders Workshop · 2026

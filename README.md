@@ -284,9 +284,3 @@ We have hand-tested and verified three core algorithmic cases to demonstrate how
 | **High request response latency** | Computer running low on memory. | Ensure at least 4 GB of RAM is free. Close high-memory active applications (e.g. Docker, IDEs). |
 
 ---
-
-## License & Attribution
-
-This workshop kit was crafted for the **Raycreatess** community. Feel free to clone, customize, and run your own local instruction events.
-
-*Contributors: **Ramya & Hemang** ([@raycreatess](https://github.com/raycreatess))*

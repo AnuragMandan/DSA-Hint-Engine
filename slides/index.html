@@ -780,7 +780,8 @@ avoid checking every pair?"</span>
             question only, never name data structure</li>
           <li>Add route <code style="color:var(--green)">@app.post("/hint/1")</code> in <code>main.py</code></li>
           <li>Call Ollama with <code style="color:var(--amber)">format="json"</code> and parse with
-            <code>json.loads()</code></li>
+            <code>json.loads()</code>
+          </li>
           <li>Return <code style="color:var(--muted)">HintResponse(thought_process=..., hint=...)</code></li>
         </ul>
       </div>
@@ -797,7 +798,8 @@ avoid checking every pair?"</span>
           <li>Instruct the model to ask exactly <strong>one</strong> guiding question</li>
           <li>Enforce <span class="tag">format="json"</span> on the Ollama call — guarantees parseable output</li>
           <li><span class="c-amber">Common trap:</span> model wraps JSON in markdown fences — strip before
-            <code>json.loads()</code></li>
+            <code>json.loads()</code>
+          </li>
           <li><span class="c-green">Test:</span> Two Sum T1 should ask about search cost, not mention "hash map"</li>
         </ul>
         <div class="code-box">
@@ -855,7 +857,8 @@ Return JSON:
           <li>Response gains a new field: <span class="tag">conceptual_explanation</span></li>
           <li>Pydantic: add <code style="color:var(--amber)">conceptual_explanation: str | None = None</code></li>
           <li><span class="c-amber">Common mistake:</span> forgetting to strip markdown fences before
-            <code>json.loads()</code></li>
+            <code>json.loads()</code>
+          </li>
         </ul>
         <div class="code-box">
           <span class="file-label">app/schemas.py</span>
