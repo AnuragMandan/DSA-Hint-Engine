@@ -240,29 +240,6 @@ Enables an interactive back-and-forth debugging conversation using an in-memory 
 
 ---
 
-## Interactive Slide Deck & Agenda
-
-The slideshow is served from `slides/index.html`. It features a full-viewport dark theme with 3D interactive particles, `Outfit` and `Fira Code` typography from Google Fonts, and responsive grid layouts.
-
-You can run the slides deck by opening `slides/index.html` directly in any web browser and navigating using your keyboard's **Left/Right Arrow keys** or the built-in control buttons.
-
-### Workshop Schedule
-
-| Time | Topic | Key Activity |
-| :--- | :--- | :--- |
-| **15:00** | **Welcome & Cold Demo** | Show the finished product; explain what we are building. |
-| **15:10** | **Setup** | Clone boilerplate, Ollama check, model pull, env vars. |
-| **15:30** | **Architecture Walkthrough** | Full request journey: Frontend → FastAPI → Ollama → response. |
-| **15:45** | **Endpoint 1 — `/hint/1`** | Build the slight conceptual hint endpoint (Socratic question). |
-| **16:15** | **Endpoint 2 — `/hint/2`** | Build the approach hint endpoint (name the algorithm). |
-| **16:40** | **Endpoint 3 — `/hint/3`** | Build the pseudocode hint endpoint (plain-English steps). |
-| **17:05** | **Break** | 10-minute refresh. |
-| **17:15** | **Session State** | Build `/session` — remember which problem the user is on. |
-| **18:20** | **Live Audit** | Test all endpoints end-to-end with curl. |
-| **18:30** | **Q&A + Wrap** | Review achievements, hand out student notes, next steps. |
-
----
-
 ## Verified LeetCode Examples
 
 We have hand-tested and verified three core algorithmic cases to demonstrate how the hint engine scales across difficulty tiers. Details of these interactions are archived in `solution/examples.md`:
